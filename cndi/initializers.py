@@ -2,6 +2,7 @@ import copy
 import importlib
 import logging
 import os
+import time
 
 from cndi.annotations import workOrder, getBeanObject, \
     validateBean, queryOverideBeanStore, constructKeyWordArguments, SingletonContext
@@ -64,6 +65,8 @@ class AppInitializer:
             7. Start Binder Configuration
         :return: None
         """
+
+        start_time = time.time()
 
         for module in self.componentsPath:
             importSubModules(module)
@@ -143,3 +146,6 @@ class AppInitializer:
         else:
             kwargs = constructKeyWordArguments(onComplete.__annotations__)
             onComplete(**kwargs)
+
+        end_time = time.time()
+        logger.info(f"App Initialisation Completed in {round(end_time - start_time, 2)} seconds")

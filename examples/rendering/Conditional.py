@@ -16,4 +16,5 @@ class TestConditionalAnnotation:
 
 if __name__ == '__main__':
     app = AppInitializer()
+    app.componentScan('cndi')
     app.run()
