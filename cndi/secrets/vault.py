@@ -17,7 +17,7 @@ class VaultSecretProvider:
         try:
             import hvac
             vault_addr = getContextEnvironment("secrets.provider.vault.addr", "http://127.0.0.1:8200")
-            vault_token = getContextEnvironment("secrets.provider.vault.token")
+            vault_token = getContextEnvironment("secrets.provider.vault.token", os.environ.get("VAULT_TOKEN", ""))
 
             client = hvac.Client(url=vault_addr, token=vault_token)
             if client.is_authenticated():
@@ -25,7 +25,7 @@ class VaultSecretProvider:
                     self.resolve(key, value, client)
                 reload_envs()
             else:
-                print("Failed to authenticate with Vault.")
+                logger.error("Failed to authenticate with Vault, check your credentials and Vault server status")
 
             AutoConfigurationProviders._PROVIDERS[VAULT_PROVIDER_PREFIX] = self
         except ImportError as ex:
