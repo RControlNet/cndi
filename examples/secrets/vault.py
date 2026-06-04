@@ -1,4 +1,3 @@
-from cndi.autoconfiguration.configure import AutoConfigurationProviders
 from cndi.consts import RCN_ENABLE_VAULT_PROVIDER
 from cndi.env import RCN_ENVS_CONFIG, getContextEnvironment
 from cndi.initializers import AppInitializer
@@ -30,7 +29,5 @@ if __name__ == '__main__':
         app_initializer = AppInitializer()
         app_initializer.componentScan("cndi.secrets")
         app_initializer.run()
-        print(AutoConfigurationProviders._PROVIDERS)
-        print(getContextEnvironment('SECRET_VALUE'))
 
         assert getContextEnvironment('SECRET_VALUE') == ASSERT_VALUE
