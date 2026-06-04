@@ -1,0 +1,20 @@
+[project]
+name = "python-dependency-injection"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "dotenv>=0.9.9",
+    "hvac>=2.4.0",
+    "pyyaml>=6.0.3",
+    "requests>=2.32.5",
+
+]
+
+[dependency-groups]
+dev = [
+    "coverage>=7.14.0",
+    "pytest>=9.0.2",
+    "testcontainers>=4.14.2",
+]
