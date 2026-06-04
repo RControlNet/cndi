@@ -14,7 +14,7 @@ tests/cndi/annotations/__pycache__/
 .venv
 .idea
 .pytest_cache
+*.iml
 dist
 build
-*.iml
 uv.lock
