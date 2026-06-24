@@ -79,22 +79,21 @@ class AppInitializer:
                 self.context.validatedBeans.append(bean)
 
         workOrderBeans = workOrder(self.context.validatedBeans)
-
         for bean in workOrderBeans:
             logger.debug(f"Registering Bean {bean['fullname']}")
             kwargs = dict()
             for key, className in bean['kwargs'].items():
                 tempBean = self.context.beanStore[className]
-                kwargs[key] = copy.deepcopy(tempBean['object']) if tempBean['newInstance'] else tempBean['object']
+                kwargs[key] = copy.deepcopy(tempBean['objectInstance']) if tempBean['newInstance'] else tempBean['objectInstance']
 
             functionObject = bean['object']
             fullname = ".".join([functionObject.__module__, functionObject.__qualname__])
             validBean = validateBean(fullname)
             if validBean:
-                bean['objectInstance'] = bean['object'](**kwargs)
+                bean['objectInstance'] = functionObject(**kwargs)
                 self.context.beanStore[bean['name']] = bean
             else:
-                logger.debug(f"Ignoring Bean {fullname} due to bean not satisfy")
+                logger.warning(f"Ignoring Bean {fullname} due to bean not satisfy")
 
         for component in self.context.components:
             validBean = validateBean(component.fullname)
