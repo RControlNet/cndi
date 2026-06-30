@@ -3,15 +3,14 @@ import unittest
 from pathlib import Path
 
 from cndi.resources import ResourceFinder
-from cndi.tests import test_with_context
-
+from cndi.tests import cndi_context_test
 
 class ResourceFinderTest(unittest.TestCase):
-    @test_with_context
+    @cndi_context_test
     def test_find_resource(self, resource_finder: ResourceFinder):
         self.assertIsNotNone(resource_finder)
 
-    @test_with_context
+    @cndi_context_test
     def test_find_resource_success(self, resource_finder: ResourceFinder):
         # Create a temporary resource file for testing
         resource_path = resource_finder.computeResourcePath()
@@ -27,7 +26,7 @@ class ResourceFinderTest(unittest.TestCase):
         os.remove(test_resource_path)
         self.assertFalse(os.path.exists(test_resource_path))
 
-    @test_with_context
+    @cndi_context_test
     def test_find_resource_not_found(self, resource_finder: ResourceFinder):
         with self.assertRaises(FileNotFoundError):
             resource_finder.findResource("non_existent_resource.txt")

@@ -1,6 +1,7 @@
-from cndi.annotations import Bean, Component
+from cndi.annotations import Bean, Component, SingletonContext
 from cndi.initializers import AppInitializer
 from test_module.TestBean import TestBean
+
 
 class TestBean2:
     def __init__(self, name: str):

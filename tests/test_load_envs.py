@@ -1,6 +1,6 @@
 import unittest
 
-from cndi.tests import test_with_context
+from cndi.tests import cndi_context_test
 
 RCN_ENVS_CONFIG = 'RCN_ENVS_CONFIG'
 
@@ -12,10 +12,10 @@ class LoadEnvTest(unittest.TestCase):
         VARS.clear()
         VARS[f"{RCN_ENVS_CONFIG}.active.profile".lower()] = "test"
 
-    @test_with_context
+    @cndi_context_test
     def testloadEnvFromFile(self):
         self.assertEqual("test", getContextEnvironment("rcn.profile"))
-    @test_with_context
+    @cndi_context_test
     def testloadEnvWithListDatatype(self):
 
         self.assertEqual(getContextEnvironment('mini.listdata.#1.name'), 'thereitis')

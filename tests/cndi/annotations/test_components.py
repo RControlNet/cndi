@@ -1,11 +1,9 @@
-import pytest
 import unittest
 
-from cndi.annotations import Component, Bean, Autowired
+from cndi.annotations import Component, Bean, Autowired, SingletonContext
 from cndi.env import VARS
-from cndi.tests import test_with_context
+from cndi.tests import cndi_context_test
 from test_module.TestBean import TestBean
-
 
 @Bean()
 def getTestBean() -> TestBean:
@@ -31,7 +29,7 @@ class TestComponents(unittest.TestCase):
     def setUp(self) -> None:
         VARS.clear()
 
-    @test_with_context
+    @cndi_context_test
     def testComponents(self, firstComponent: FirstComponent, secondComponent: SecondTestClass, testBean: TestBean):
         self.assertTrue(firstComponent.triggered)
         self.assertIsNotNone(testBean)

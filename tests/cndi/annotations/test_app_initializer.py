@@ -1,6 +1,6 @@
 import unittest
 from cndi.annotations import Bean
-from cndi.tests import test_with_context
+from cndi.tests import cndi_context_test
 from test_module.TestBean import TestBean
 
 @Bean()
@@ -8,7 +8,7 @@ def getTestBean() -> TestBean:
     return TestBean("Hello")
 
 class AppInitializerTest(unittest.TestCase):
-    @test_with_context
+    @cndi_context_test
     def testComponentScanAndDI(self, testBean: TestBean):
         self.assertIsNotNone(testBean)
         self.assertEqual(testBean.name, "Hello")

@@ -22,6 +22,7 @@ Functions:
 import logging
 import os
 import types
+from inspect import getfullargspec
 from typing import Callable, Any
 
 from cndi.annotations.component import ComponentClass
@@ -34,6 +35,7 @@ class SingletonContext:
     """Singleton context manager for storing beans, components, and related data."""
     _instance = None
     _frozen = False
+    _test_scope = False
 
     def __new__(cls):
         if cls._instance is None:
@@ -43,10 +45,12 @@ class SingletonContext:
             cls._instance.autowires = []
             cls._instance.components = []
             cls._instance.beanStore = {}
+            cls._instance.replays = []
             cls._instance.componentStore = {}
             cls._instance.profilesStores = {}
             cls._instance.conditionalRender = {}
             cls._instance.overrideStore = {}
+            cls._instance._test_scope = False
         return cls._instance
 
     def freeze(self):
@@ -151,7 +155,18 @@ class AutowiredClass:
             map(lambda dependency: normaliseModuleAndClassName('.'.join([dependency.__module__, dependency.__name__])),
                 self.kwargs.values()))
 
+def _override_bean_type_inner_function(func, type):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        return func(*args, **kwargs)
 
+    fullname = '.'.join([wrapper.__module__, wrapper.__name__])
+
+    context.overrideStore[fullname] = {
+        "func": wrapper,
+        "overrideType": type
+    }
+    return wrapper
 def OverrideBeanType(type: object):
     """
     OverrideBeanType is used to override the current annotated @Component class to be injected as some other object
@@ -160,20 +175,12 @@ def OverrideBeanType(type: object):
     :return: function wrapper
     """
 
-    def inner_function(func):
-        @wraps(func)
-        def wrapper(*args, **kwargs):
-            return func(*args, **kwargs)
+    def callable(ext_func):
+        inner_function = lambda func: _bean_inner_function(func, type)
+        replay_context(_bean_inner_function, ext_func, type=type)
+        return inner_function(ext_func)
 
-        fullname = '.'.join([wrapper.__module__, wrapper.__name__])
-
-        context.overrideStore[fullname] = {
-            "func": wrapper,
-            "overrideType": type
-        }
-        return wrapper
-
-    return inner_function
+    return callable
 
 
 def queryOverideBeanStore(fullname):
@@ -182,37 +189,43 @@ def queryOverideBeanStore(fullname):
     else:
         return None
 
+def replay_context(annotation, obj, **kwargs):
+    if context._test_scope:
+        context.replays.append((annotation, obj, kwargs))
+        logger.info(f"Adding Replay for {annotation} {obj}")
 
-def Component(func: object):
-    """
-    A decorator that registers a class as a component.
+def Component(ext_func: object):
+    def inner_method(func):
+        """
+        A decorator that registers a class as a component.
+    
+        When a class is decorated with @Component, the AppInitializer tries to automatically initialize the class. The class is registered with its full name, which is constructed from the module name and the class name.
+    
+        Args:
+            func: The class to be registered as a component.
+    
+        Returns:
+            The decorated class.
+        """
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            return func(*args, **kwargs)
 
-    When a class is decorated with @Component, the AppInitializer tries to automatically initialize the class. The class is registered with its full name, which is constructed from the module name and the class name.
-
-    Args:
-        func: The class to be registered as a component.
-
-    Returns:
-        The decorated class.
-    """
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        return func(*args, **kwargs)
-
-    moduleName = wrapper.__module__[:-9] if wrapper.__module__.endswith(".__init__") else wrapper.__module__
-    componentFullName = '.'.join([moduleName, wrapper.__qualname__])
-    logger.debug(f"Registering Function name " + componentFullName)
-    duplicateComponents = list(filter(lambda component: component.fullname == componentFullName, context.components))
-    if duplicateComponents.__len__() > 0:
-        logger.debug(f"Duplicate Component found for: {duplicateComponents}")
-    else:
-        context.components.append(ComponentClass(**{
-            'fullname': componentFullName,
-            'func': wrapper,
-            'annotations': wrapper.__init__.__annotations__ if "__annotations__" in dir(wrapper.__init__) else {}
-        }))
-    return wrapper
-
+        moduleName = wrapper.__module__[:-9] if wrapper.__module__.endswith(".__init__") else wrapper.__module__
+        componentFullName = '.'.join([moduleName, wrapper.__qualname__])
+        logger.debug(f"Registering Function name " + componentFullName)
+        duplicateComponents = list(filter(lambda component: component.fullname == componentFullName, context.components))
+        if duplicateComponents.__len__() > 0:
+            logger.debug(f"Duplicate Component found for: {duplicateComponents}")
+        else:
+            context.components.append(ComponentClass(**{
+                'fullname': componentFullName,
+                'func': wrapper,
+                'annotations': wrapper.__init__.__annotations__ if "__annotations__" in dir(wrapper.__init__) else {}
+            }))
+        return wrapper
+    replay_context(inner_method, ext_func)
+    return inner_method(ext_func)
 
 def validateBean(fullname):
     """
@@ -244,6 +257,35 @@ def validateBean(fullname):
 
     return flag
 
+def _bean_inner_function(func, newInstance):
+    annotations = func.__annotations__
+    if  'return' not in annotations:
+        raise Exception(f'Not a valid bean {func}')
+
+    returnType = annotations['return']
+    del annotations['return']
+
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        return func(*args, **kwargs)
+
+    fullname = '.'.join([returnType.__module__, returnType.__name__])
+    annotations = dict(
+        map(lambda key: (key, '.'.join([annotations[key].__module__, annotations[key].__qualname__])), annotations))
+
+    if validateBean(fullname):
+        context.beans.append({
+            'name': fullname,
+            'newInstance': newInstance,
+            'object': wrapper,
+            'fullname': wrapper.__qualname__,
+            'kwargs': annotations,
+            'index': len(context.beans)
+        })
+
+        return wrapper
+    else:
+        return None
 
 def Bean(newInstance=False):
     """
@@ -251,36 +293,26 @@ def Bean(newInstance=False):
     :param newInstance:
     :return:
     """
+    def callable(ext_func):
+        inner_function = lambda func: _bean_inner_function(func, newInstance)
+        replay_context(_bean_inner_function, ext_func, newInstance=newInstance)
+        return inner_function(ext_func)
 
-    def inner_function(func):
-        annotations = func.__annotations__
-        returnType = annotations['return']
-        del annotations['return']
+    return callable
 
-        @wraps(func)
-        def wrapper(*args, **kwargs):
-            return func(*args, **kwargs)
+def _conditional_rendering_inner_function(func, callback=lambda method: True, overrideFullName = None):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        return func(*args, **kwargs)
 
-        fullname = '.'.join([returnType.__module__, returnType.__name__])
-        annotations = dict(
-            map(lambda key: (key, '.'.join([annotations[key].__module__, annotations[key].__qualname__])), annotations))
+    fullname = ".".join([wrapper.__module__, wrapper.__qualname__]) if overrideFullName is None else overrideFullName
 
-        if validateBean(fullname):
-            context.beans.append({
-                'name': fullname,
-                'newInstance': newInstance,
-                'object': wrapper,
-                'fullname': wrapper.__qualname__,
-                'kwargs': annotations,
-                'index': len(context.beans)
-            })
+    context.conditionalRender[fullname] = {
+        "func": wrapper,
+        "callback": callback
+    }
 
-            return wrapper
-        else:
-            return None
-
-    return inner_function
-
+    return wrapper
 
 def ConditionalRendering(callback=lambda method: True, overrideFullName = None):
     """
@@ -295,21 +327,13 @@ def ConditionalRendering(callback=lambda method: True, overrideFullName = None):
         The decorated class, if the callback returns True. None, if the callback returns False.
     """
 
-    def inner_function(func: object):
-        @wraps(func)
-        def wrapper(*args, **kwargs):
-            return func(*args, **kwargs)
+    def callable(ext_func):
+        inner_function = lambda func: _conditional_rendering_inner_function(func, callback=callback, overrideFullName = overrideFullName)
+        replay_context(_conditional_rendering_inner_function, ext_func, callback=callback, overrideFullName = overrideFullName)
+        return inner_function(ext_func)
 
-        fullname = ".".join([wrapper.__module__, wrapper.__qualname__]) if overrideFullName is None else overrideFullName
 
-        context.conditionalRender[fullname] = {
-            "func": wrapper,
-            "callback": callback
-        }
-
-        return wrapper
-
-    return inner_function
+    return callable
 
 
 def queryContitionalRenderingStore(fullname):
@@ -330,6 +354,19 @@ def constructKeyWordArguments(annotations, required=True):
             logger.warn(f"Bean not found {beanName} and required is set to false")
     return kwargs
 
+def _profile_inner_function(func, profiles):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        return func(*args, **kwargs)
+
+    fullname = ".".join([wrapper.__module__, wrapper.__qualname__])
+    context.profilesStores[fullname] = {
+        "func": wrapper,
+        "profiles": profiles
+    }
+
+    return wrapper
+
 def Profile(profiles=["default"]):
     """
 
@@ -337,20 +374,13 @@ def Profile(profiles=["default"]):
     :return:
     """
 
-    def inner_function(func: Callable):
-        @wraps(func)
-        def wrapper(*args, **kwargs):
-            return func(*args, **kwargs)
+    def callable(ext_func):
+        inner_function = lambda func: _profile_inner_function(func,profiles=profiles)
+        replay_context(_profile_inner_function, ext_func, profiles=profiles)
+        return inner_function(ext_func)
 
-        fullname = ".".join([wrapper.__module__, wrapper.__qualname__])
-        context.profilesStores[fullname] = {
-            "func": wrapper,
-            "profiles": profiles
-        }
 
-        return wrapper
-
-    return inner_function
+    return callable
 
 
 def queryProfileData(fullname):
@@ -360,6 +390,21 @@ def queryProfileData(fullname):
         return None
 
 
+def _autowired_inner_function(func, required):
+    annotations = func.__annotations__
+
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        return func(*args, **kwargs)
+
+    context.autowires.append(AutowiredClass(required=required, **{
+        'kwargs': annotations,
+        'func': wrapper
+    }))
+
+    return wrapper
+
+
 def Autowired(required=True):
     """
     
@@ -367,21 +412,12 @@ def Autowired(required=True):
     :return:
     """
 
-    def inner_function(func: object):
-        annotations = func.__annotations__
+    def callable(ext_func):
+        inner_function = lambda func: _autowired_inner_function(func,required=required)
+        replay_context(_autowired_inner_function, ext_func, required=required)
+        return inner_function(ext_func)
 
-        @wraps(func)
-        def wrapper(*args, **kwargs):
-            return func(*args, **kwargs)
-
-        context.autowires.append(AutowiredClass(required=required, **{
-            'kwargs': annotations,
-            'func': wrapper
-        }))
-
-        return wrapper
-
-    return inner_function
+    return callable
 
 def getBean(beans, name):
     return list(filter(lambda x: x['name'] == name, beans))[0]

@@ -19,8 +19,8 @@ def on_load_2(object: EventBus):
     object.publish("on_load")                 # Execute using Event Bus
 
 @OnEvent("on_load_3")
-def on_load_3():
-    print("Called Func 3")
+def on_load_3(test: str, object: EventBus):
+    print("Called Func 3", test)
 
 @OnEvent(BuiltInEventsTypes.ON_CONTEXT_LOAD)
 def on_context_load():
