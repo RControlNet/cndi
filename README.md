@@ -12,21 +12,21 @@ Follow the below code to simplify understanding, or can also refer to [main.py](
     
     from cndi.annotations import Bean, Autowired, AppInitializer
     
-    class TestBean:
+    class BeanTest:
         def __init__(self, name):
             self.name = name
     
     
     @Bean()
-    def getTestBean() -> TestBean:
-        return TestBean("Test 123")
+    def getTestBean() -> BeanTest:
+        return BeanTest("Test 123")
     
     testBean = None
     
     app = AppInitializer()
     if __name__ == "__main__":
         @Autowired()
-        def setTestBean(bean: TestBean):
+        def setTestBean(bean: BeanTest):
             global testBean
             testBean = bean
     

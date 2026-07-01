@@ -1,14 +1,32 @@
-import unittest
-from cndi.annotations import Bean
-from cndi.tests import cndi_context_test
-from test_module.TestBean import TestBean
+import pytest
+from cndi.annotations import Bean, SingletonContext
+from cndi.tests import cndi_pytest_fixture, cndi_inject
+import logging
 
-@Bean()
-def getTestBean() -> TestBean:
-    return TestBean("Hello")
+logger = logging.getLogger(__name__)
 
-class AppInitializerTest(unittest.TestCase):
-    @cndi_context_test
-    def testComponentScanAndDI(self, testBean: TestBean):
-        self.assertIsNotNone(testBean)
-        self.assertEqual(testBean.name, "Hello")
+class BeanTest:
+    def __init__(self, name):
+        self.name = name
+
+def register_beans():
+    @Bean()
+    def getTestBean() -> BeanTest:
+        logger.info(f"Bean Test: {BeanTest}")
+        return BeanTest("Hello")
+
+cndi_context = cndi_pytest_fixture(packages=["cndi", "tests.cndi"], freeze=False, preload_callbacks=register_beans)
+
+@pytest.fixture(scope="module")
+def bean_test(cndi_context):
+    from cndi.annotations import getBeanObject
+
+    logger.info("Available Beans in context: %s", list(SingletonContext().beanStore.keys()))
+    return getBeanObject(BeanTest)
+
+@cndi_inject
+def testComponentScanAndDI(bean_test: BeanTest):
+
+    assert bean_test is not None
+    assert bean_test.name == "Hello"
+

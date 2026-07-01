@@ -103,7 +103,7 @@ def getBeanObject(objectType):
     Returns:
         An instance of the bean of the specified type.
     """
-    if isinstance(objectType, type):
+    if isinstance(objectType, type) or isinstance(objectType, types.FunctionType):
         objectType = normaliseModuleAndClassName('.'.join([objectType.__module__, objectType.__name__]))
     bean = queryBeanStorage(objectType)
     objectInstance = bean['objectInstance']
@@ -194,6 +194,17 @@ def replay_context(annotation, obj, **kwargs):
         context.replays.append((annotation, obj, kwargs))
         logger.info(f"Adding Replay for {annotation} {obj}")
 
+def _resolve_function_fullname(wrapper):
+    """
+    Resolves the full name of a function, including its module and qualified name.
+
+    Args:
+        func: The function for which to resolve the full name.
+    """
+    moduleName = wrapper.__module__[:-9] if wrapper.__module__.endswith(".__init__") else wrapper.__module__
+    componentFullName = '.'.join([moduleName, wrapper.__qualname__])
+    return componentFullName
+
 def Component(ext_func: object):
     def inner_method(func):
         """
@@ -211,8 +222,7 @@ def Component(ext_func: object):
         def wrapper(*args, **kwargs):
             return func(*args, **kwargs)
 
-        moduleName = wrapper.__module__[:-9] if wrapper.__module__.endswith(".__init__") else wrapper.__module__
-        componentFullName = '.'.join([moduleName, wrapper.__qualname__])
+        componentFullName = _resolve_function_fullname(wrapper)
         logger.debug(f"Registering Function name " + componentFullName)
         duplicateComponents = list(filter(lambda component: component.fullname == componentFullName, context.components))
         if duplicateComponents.__len__() > 0:
@@ -259,7 +269,10 @@ def validateBean(fullname):
 
 def _bean_inner_function(func, newInstance):
     annotations = func.__annotations__
+    logger.debug(f"Registering Bean {func} with annotations {annotations}")
     if  'return' not in annotations:
+        if context._test_scope:
+            return
         raise Exception(f'Not a valid bean {func}')
 
     returnType = annotations['return']
@@ -269,9 +282,14 @@ def _bean_inner_function(func, newInstance):
     def wrapper(*args, **kwargs):
         return func(*args, **kwargs)
 
-    fullname = '.'.join([returnType.__module__, returnType.__name__])
+    fullname = _resolve_function_fullname(returnType)
     annotations = dict(
         map(lambda key: (key, '.'.join([annotations[key].__module__, annotations[key].__qualname__])), annotations))
+
+    duplicate_beans = [b for b in context.beans if b['name'] == fullname]
+    if duplicate_beans:
+        logger.debug(f"Duplicate Bean found for: {fullname} — skipping registration")
+        return wrapper
 
     if validateBean(fullname):
         context.beans.append({
